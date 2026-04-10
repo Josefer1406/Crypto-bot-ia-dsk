@@ -21,23 +21,21 @@ def clasificar_trade(asset):
     prob = asset["prob"]
     score = asset["score"]
     
-    # Elite: alta calidad (score mínimo 3, probabilidad mínima 0.75)
-    if prob >= 0.75 and score >= 3:
+    # Elite: muy alta calidad
+    if prob >= 0.80 and score >= 3:
         return "elite"
     
-    # Oportunista buena: calidad media-alta
-    if prob >= 0.65 and score >= 2:
+    # Oportunista buena: calidad alta (sin regular)
+    if prob >= 0.70 and score >= 3:
         return "oportunista_buena"
     
-    # Oportunista regular: calidad mínima aceptable
-    if prob >= 0.55 and score >= 2:
-        return "oportunista_regular"
-    
+    # Ya no hay "regular"
     return None
 
 def bot():
     print("🚀 BOT HEDGE FUND CON IA - MODO", "SIMULACIÓN" if config.SIMULATION_MODE else "REAL")
-    print("📊 Clasificación: Elite (15%) | Oportunista Buena (10%) | Oportunista Regular (5%)")
+    print("📊 Clasificación: Elite (12%) | Oportunista Buena (7%)")
+    print("🎯 Solo trades con Score ≥ 3 y Prob ≥ 0.70")
     contador = 0
     ultimo_reentreno = 0
     
@@ -63,7 +61,7 @@ def bot():
             portfolio.actualizar(precios)
             
             if not ranking_total:
-                print("⛔ No hay activos válidos")
+                print("⛔ No hay activos válidos (score ≥ 3)")
                 time.sleep(config.CYCLE_TIME)
                 continue
             
@@ -71,22 +69,18 @@ def bot():
             universo = ranking_total[:8]
             
             elite = [a for a in universo if a.get("tipo") == "elite"]
-            oportunistas_buenas = [a for a in universo if a.get("tipo") == "oportunista_buena"]
-            oportunistas_regulares = [a for a in universo if a.get("tipo") == "oportunista_regular"]
+            buenas = [a for a in universo if a.get("tipo") == "oportunista_buena"]
             
             espacios = config.MAX_POSICIONES - len(portfolio.posiciones)
-            print(f"   📊 Espacios: {espacios} | Elite: {len(elite)} | Buena: {len(oportunistas_buenas)} | Regular: {len(oportunistas_regulares)}")
+            print(f"   📊 Espacios: {espacios} | Elite: {len(elite)} | Buenas: {len(buenas)}")
             
-            # Prioridad: Elite > Oportunista Buena > Oportunista Regular
+            # Prioridad: Elite > Buena
             seleccion = []
             if espacios > 0:
                 seleccion.extend(elite[:espacios])
                 espacios -= len(seleccion)
             if espacios > 0:
-                seleccion.extend(oportunistas_buenas[:espacios])
-                espacios -= len(oportunistas_buenas[:espacios])
-            if espacios > 0:
-                seleccion.extend(oportunistas_regulares[:espacios])
+                seleccion.extend(buenas[:espacios])
             
             if not seleccion:
                 print("⛔ Sin candidatos para operar")
@@ -96,7 +90,6 @@ def bot():
             ejecutados = 0
             for asset in seleccion:
                 if asset["symbol"] in portfolio.posiciones:
-                    print(f"   ⚠️ {asset['symbol']} ya está en posiciones")
                     continue
                 
                 ejecutado = portfolio.comprar(
@@ -131,6 +124,7 @@ def bot():
             print(f"💰 Capital: ${round(portfolio.capital,2)}")
             print(f"📊 Posiciones: {list(portfolio.posiciones.keys())}")
             print(f"🌐 Universo activo: {len(universo)}")
+            print(f"🔥 Elite: {len(elite)} | Buenas: {len(buenas)}")
             print(f"⏱ Cooldown: {portfolio.cooldown}s")
             
             time.sleep(config.CYCLE_TIME)
