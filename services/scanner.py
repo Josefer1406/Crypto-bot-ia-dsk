@@ -49,14 +49,10 @@ def analizar(symbol):
     
     thresholds = optimizer.optimal
     
-    # FILTROS EXIGENTES
-    if volatilidad > thresholds['vol_max']:
+    # Filtros de mercado (usando config)
+    if volatilidad > thresholds['vol_max'] or volatilidad < thresholds['vol_min']:
         return None
-    if volatilidad < thresholds['vol_min']:
-        return None
-    if rsi < thresholds['rsi_min']:
-        return None
-    if rsi > thresholds['rsi_max']:
+    if rsi < thresholds['rsi_min'] or rsi > thresholds['rsi_max']:
         return None
     
     # Cálculo del score (0-4)
@@ -67,21 +63,19 @@ def analizar(symbol):
         score += 1
     if df["returns"].iloc[-1] > 0:
         score += 1
-    if 40 < rsi < 75:  # Rango más exigente
+    if 40 < rsi < 75:
         score += 1
     
-    # Score mínimo para considerar (2)
     if score < thresholds['score_min']:
         return None
     
-    # Probabilidad por IA o fallback
+    # Probabilidad (IA o fallback)
     prob_ia = ai_model.predict_probability(df)
     if prob_ia is not None:
         prob = prob_ia
     else:
-        # Fallback más conservador
-        prob_map = {2: 0.55, 3: 0.70, 4: 0.85}
-        prob = prob_map.get(score, 0.50)
+        prob_map = {2: 0.60, 3: 0.75, 4: 0.85}
+        prob = prob_map.get(score, 0.55)
     
     atr_stop = atr_val * config.ATR_MULTIPLIER / precio
     atr_stop = min(atr_stop, 0.05)
