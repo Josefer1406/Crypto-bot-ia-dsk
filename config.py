@@ -1,5 +1,6 @@
 # ======================================
 # CONFIGURACIÓN PRINCIPAL - BOT ADAPTATIVO CON IA
+# VERSIÓN PARA PRUEBAS (menos exigente)
 # ======================================
 
 # ---------- MODO ----------
@@ -11,12 +12,12 @@ CAPITAL_INICIAL = 1000
 MAX_POSICIONES = 3
 USO_CAPITAL = 0.60
 
-# ---------- PARÁMETROS DINÁMICOS ----------
-RSI_MIN_BASE = 45
-RSI_MAX_BASE = 70
-VOLATILIDAD_MAX_BASE = 0.10
-VOLATILIDAD_MIN_BASE = 0.003
-SCORE_MINIMO_BASE = 3
+# ---------- PARÁMETROS DINÁMICOS (VERSIÓN MENOS EXIGENTE PARA PRUEBAS) ----------
+RSI_MIN_BASE = 35               # ANTES: 45  (más fácil de cumplir)
+RSI_MAX_BASE = 75               # ANTES: 70  (más fácil de cumplir)
+VOLATILIDAD_MAX_BASE = 0.15     # ANTES: 0.10 (permite más volatilidad)
+VOLATILIDAD_MIN_BASE = 0.001    # ANTES: 0.003 (permite menos volatilidad)
+SCORE_MINIMO_BASE = 2           # ANTES: 3    (más fácil de cumplir)
 ATR_PERIOD = 14
 ATR_MULTIPLIER = 1.5
 TRAILING_GAP_DINAMICO = True
@@ -38,11 +39,12 @@ COOLDOWN_MIN = 5
 TIMEFRAME = "5m"
 CYCLE_TIME = 15
 
-# ---------- UNIVERSO DE ACTIVOS ----------
+# ---------- UNIVERSO DE ACTIVOS (agregado DOGE para pruebas) ----------
 CRYPTOS = [
     "BTC/USDT", "ETH/USDT", "SOL/USDT", "AVAX/USDT", "ADA/USDT",
     "LINK/USDT", "ATOM/USDT", "INJ/USDT", "NEAR/USDT", "APT/USDT",
-    "OP/USDT", "RENDER/USDT", "AR/USDT", "POL/USDT", "XRP/USDT"
+    "OP/USDT", "RENDER/USDT", "AR/USDT", "POL/USDT", "XRP/USDT",
+    "DOGE/USDT"     # Agregado para pruebas (más volátil)
 ]
 
 # ---------- CORRELACIÓN ----------
@@ -52,7 +54,8 @@ CORRELACION = {
     "L3": ["ADA/USDT", "XRP/USDT", "POL/USDT"],
     "L4": ["LINK/USDT", "ATOM/USDT"],
     "L5": ["INJ/USDT", "NEAR/USDT", "APT/USDT"],
-    "L6": ["OP/USDT", "AR/USDT", "RENDER/USDT"]
+    "L6": ["OP/USDT", "AR/USDT", "RENDER/USDT"],
+    "MEME": ["DOGE/USDT"]   # Grupo aparte para DOGE
 }
 
 # ---------- API KEYS (cambia después por las tuyas) ----------
