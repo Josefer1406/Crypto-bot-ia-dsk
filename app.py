@@ -21,24 +21,20 @@ def clasificar_trade(asset):
     prob = asset["prob"]
     score = asset["score"]
     
-    # Elite (mejor oportunidad)
+    # Elite: alta calidad
     if prob >= 0.75 and score >= 3:
         return "elite"
     
-    # Oportunista buena (sólida)
+    # Oportunista buena: calidad media-alta
     if prob >= 0.65 and score >= 2:
         return "oportunista_buena"
-    
-    # Oportunista regular (aceptable, pero con poco capital)
-    if prob >= 0.55 and score >= 2:
-        return "oportunista_regular"
     
     return None
 
 def bot():
     print("🚀 BOT HEDGE FUND CON IA - MODO", "SIMULACIÓN" if config.SIMULATION_MODE else "REAL")
-    print("📊 Clasificación: Elite (12%) | Buena (8%) | Regular (3%)")
-    print("🎯 Score mínimo 2, Prob mínima 0.55")
+    print("📊 Clasificación: Elite (12%) | Buena (8%)")
+    print("🎯 Prob mínima: Elite 0.75, Buena 0.65 | Score mín: Elite 3, Buena 2")
     contador = 0
     ultimo_reentreno = 0
     
@@ -73,21 +69,17 @@ def bot():
             
             elite = [a for a in universo if a.get("tipo") == "elite"]
             buenas = [a for a in universo if a.get("tipo") == "oportunista_buena"]
-            regulares = [a for a in universo if a.get("tipo") == "oportunista_regular"]
             
             espacios = config.MAX_POSICIONES - len(portfolio.posiciones)
-            print(f"   📊 Espacios: {espacios} | Elite: {len(elite)} | Buenas: {len(buenas)} | Regulares: {len(regulares)}")
+            print(f"   📊 Espacios: {espacios} | Elite: {len(elite)} | Buenas: {len(buenas)}")
             
-            # Selección por prioridad
+            # Prioridad: Elite > Buena
             seleccion = []
             if espacios > 0:
                 seleccion.extend(elite[:espacios])
                 espacios -= len(seleccion)
             if espacios > 0:
                 seleccion.extend(buenas[:espacios])
-                espacios -= len(seleccion)
-            if espacios > 0:
-                seleccion.extend(regulares[:espacios])
             
             if not seleccion:
                 print("⛔ Sin candidatos para operar")
@@ -131,7 +123,7 @@ def bot():
             print(f"💰 Capital: ${round(portfolio.capital,2)}")
             print(f"📊 Posiciones: {list(portfolio.posiciones.keys())}")
             print(f"🌐 Universo activo: {len(universo)}")
-            print(f"🔥 Elite: {len(elite)} | Buenas: {len(buenas)} | Regulares: {len(regulares)}")
+            print(f"🔥 Elite: {len(elite)} | Buenas: {len(buenas)}")
             print(f"⏱ Cooldown: {portfolio.cooldown}s")
             
             time.sleep(config.CYCLE_TIME)
