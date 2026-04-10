@@ -21,21 +21,24 @@ def clasificar_trade(asset):
     prob = asset["prob"]
     score = asset["score"]
     
-    # Elite: muy alta calidad
-    if prob >= 0.80 and score >= 3:
+    # Elite (mejor oportunidad)
+    if prob >= 0.75 and score >= 3:
         return "elite"
     
-    # Oportunista buena: calidad alta (sin regular)
-    if prob >= 0.70 and score >= 3:
+    # Oportunista buena (sólida)
+    if prob >= 0.65 and score >= 2:
         return "oportunista_buena"
     
-    # Ya no hay "regular"
+    # Oportunista regular (aceptable, pero con poco capital)
+    if prob >= 0.55 and score >= 2:
+        return "oportunista_regular"
+    
     return None
 
 def bot():
     print("🚀 BOT HEDGE FUND CON IA - MODO", "SIMULACIÓN" if config.SIMULATION_MODE else "REAL")
-    print("📊 Clasificación: Elite (12%) | Oportunista Buena (7%)")
-    print("🎯 Solo trades con Score ≥ 3 y Prob ≥ 0.70")
+    print("📊 Clasificación: Elite (12%) | Buena (8%) | Regular (3%)")
+    print("🎯 Score mínimo 2, Prob mínima 0.55")
     contador = 0
     ultimo_reentreno = 0
     
@@ -61,26 +64,30 @@ def bot():
             portfolio.actualizar(precios)
             
             if not ranking_total:
-                print("⛔ No hay activos válidos (score ≥ 3)")
+                print("⛔ No hay activos válidos")
                 time.sleep(config.CYCLE_TIME)
                 continue
             
             ranking_total.sort(key=lambda x: x["score_final"], reverse=True)
-            universo = ranking_total[:8]
+            universo = ranking_total[:10]
             
             elite = [a for a in universo if a.get("tipo") == "elite"]
             buenas = [a for a in universo if a.get("tipo") == "oportunista_buena"]
+            regulares = [a for a in universo if a.get("tipo") == "oportunista_regular"]
             
             espacios = config.MAX_POSICIONES - len(portfolio.posiciones)
-            print(f"   📊 Espacios: {espacios} | Elite: {len(elite)} | Buenas: {len(buenas)}")
+            print(f"   📊 Espacios: {espacios} | Elite: {len(elite)} | Buenas: {len(buenas)} | Regulares: {len(regulares)}")
             
-            # Prioridad: Elite > Buena
+            # Selección por prioridad
             seleccion = []
             if espacios > 0:
                 seleccion.extend(elite[:espacios])
                 espacios -= len(seleccion)
             if espacios > 0:
                 seleccion.extend(buenas[:espacios])
+                espacios -= len(seleccion)
+            if espacios > 0:
+                seleccion.extend(regulares[:espacios])
             
             if not seleccion:
                 print("⛔ Sin candidatos para operar")
@@ -124,7 +131,7 @@ def bot():
             print(f"💰 Capital: ${round(portfolio.capital,2)}")
             print(f"📊 Posiciones: {list(portfolio.posiciones.keys())}")
             print(f"🌐 Universo activo: {len(universo)}")
-            print(f"🔥 Elite: {len(elite)} | Buenas: {len(buenas)}")
+            print(f"🔥 Elite: {len(elite)} | Buenas: {len(buenas)} | Regulares: {len(regulares)}")
             print(f"⏱ Cooldown: {portfolio.cooldown}s")
             
             time.sleep(config.CYCLE_TIME)
