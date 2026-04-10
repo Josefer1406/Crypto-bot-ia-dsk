@@ -14,7 +14,7 @@ class Portfolio:
         self.cooldown = config.COOLDOWN_BASE
         print(f"🚀 Capital inicial: ${self.capital_inicial} | Modo {'SIMULACIÓN' if config.SIMULATION_MODE else 'REAL'}")
         print(f"📊 Tamaños: Elite {config.TAMANO_ELITE*100}% | Buena {config.TAMANO_OPORTUNISTA_BUENA*100}%")
-        print(f"🔄 Rotación inteligente ACTIVADA")
+        print(f"🔄 Rotación inteligente ACTIVADA (prioridad sobre correlación)")
     
     def capital_invertido(self):
         return sum(p["inversion"] for p in self.posiciones.values())
@@ -58,6 +58,7 @@ class Portfolio:
         return False
     
     def evaluar_posiciones(self, precios):
+        """Retorna lista de posiciones ordenadas de peor a mejor calidad (para rotación)"""
         ranking = []
         for symbol, pos in self.posiciones.items():
             precio = precios.get(symbol)
@@ -65,7 +66,9 @@ class Portfolio:
                 continue
             pnl = (precio - pos["entry"]) / pos["entry"]
             tiempo = time.time() - pos["tiempo"]
+            # Calidad: pnl negativo penaliza mucho, pnl positivo beneficia
             calidad = -pnl * 2 if pnl < 0 else pnl * 0.5
+            # Si lleva más de 4 horas sin ganar >1%, penaliza
             if tiempo > 14400 and pnl < 0.01:
                 calidad -= 0.3
             ranking.append({
@@ -78,18 +81,21 @@ class Portfolio:
         return ranking
     
     def deberia_rotar(self, nueva_senal, ranking):
+        """Decide si la nueva señal justifica reemplazar a la peor posición actual"""
         if not ranking:
             return False
         peor = ranking[0]
         nueva_prob = nueva_senal.get("prob", 0)
         nuevo_score = nueva_senal.get("score", 0)
-        es_elite = nueva_prob >= 0.70 and nuevo_score >= 3
+        nuevo_tipo = nueva_senal.get("tipo", "")
+        es_elite = (nuevo_tipo == "elite") or (nueva_prob >= 0.70 and nuevo_score >= 3)
         
-        if es_elite and peor["pnl"] < 0.05:
+        # Reglas de rotación
+        if es_elite and peor["pnl"] < 0.05:      # Elite contra posición con <5% ganancia
             return True
-        if peor["pnl"] < -0.01:
+        if peor["pnl"] < -0.01:                   # Posición en pérdida >1%
             return True
-        if peor["calidad"] < -0.5:
+        if peor["calidad"] < -0.5:                # Calidad muy baja
             return True
         return False
     
@@ -99,22 +105,45 @@ class Portfolio:
         elif tipo == "oportunista_buena":
             return config.TAMANO_OPORTUNISTA_BUENA
         else:
-            return 0.05
+            return 0.05  # fallback seguro
     
     def comprar(self, symbol, precio, prob, score, tipo, precios=None, atr_stop=None, trailing_gap=None):
+        # 1. Cooldown
         if not self.puede_operar():
             tiempo_restante = self.cooldown - (time.time() - self.last_trade)
             if tiempo_restante > 0:
                 print(f"   ⏱ Cooldown: esperar {round(tiempo_restante, 1)}s")
             return False
         
+        # 2. Ya existe?
         if symbol in self.posiciones:
             return False
         
+        # ========== 3. ROTACIÓN PRIORITARIA (antes que correlación) ==========
+        # Si no hay espacio, evaluar rotación incluso si el nuevo símbolo está correlacionado
+        if len(self.posiciones) >= config.MAX_POSICIONES:
+            if precios is None:
+                return False
+            ranking = self.evaluar_posiciones(precios)
+            if not ranking:
+                return False
+            
+            nueva_senal = {"prob": prob, "score": score, "tipo": tipo}
+            if self.deberia_rotar(nueva_senal, ranking):
+                peor = ranking[0]
+                print(f"   🔁 ROTANDO (prioridad): sale {peor['symbol']} (pnl {round(peor['pnl']*100,1)}%) -> entra {symbol}")
+                self.cerrar(peor['symbol'], precios[peor['symbol']])
+                # Ahora hay espacio, continuamos
+            else:
+                print(f"   ⚠️ Nueva señal no justifica rotación")
+                return False
+        
+        # ========== 4. CORRELACIÓN (ahora después de posible rotación) ==========
         if self.correlacionado(symbol):
             print(f"   ⛔ Correlación evitada: {symbol}")
             return False
         
+        # 5. Tamaño de posición
         size_pct = self.get_tamano_por_calidad(tipo)
         capital_trade = self.capital * size_pct
         
@@ -127,18 +156,6 @@ class Portfolio:
         
         print(f"   💰 Capital: ${round(self.capital,2)} | Invertido: ${round(self.capital_invertido(),2)} | Nuevo: ${round(capital_trade,2)} ({round(size_pct*100)}%)")
         
-        if len(self.posiciones) >= config.MAX_POSICIONES:
-            if precios is None:
-                return False
-            ranking = self.evaluar_posiciones(precios)
-            nueva_senal = {"prob": prob, "score": score}
-            if not self.deberia_rotar(nueva_senal, ranking):
-                print(f"   ⚠️ Nueva señal no justifica rotación")
-                return False
-            peor = ranking[0]
-            print(f"   🔁 ROTANDO: sale {peor['symbol']} (pnl {round(peor['pnl']*100,1)}%) -> entra {symbol}")
-            self.cerrar(peor['symbol'], precios[peor['symbol']])
-        
         if nuevo_total > limite:
             print(f"   ⚠️ Límite de capital excedido")
             return False
@@ -148,6 +165,7 @@ class Portfolio:
         
         cantidad = capital_trade / precio
         
+        # 6. Ejecutar orden
         if config.SIMULATION_MODE:
             precio_real = precio
             cantidad_real = cantidad
@@ -196,11 +214,13 @@ class Portfolio:
             if precio > pos["max_precio"]:
                 pos["max_precio"] = precio
             
+            # Stop loss dinámico
             if pnl <= pos["stop_loss_dinamico"]:
                 print(f"   🔴 Stop loss en {symbol}: pnl {round(pnl*100,1)}%")
                 self.cerrar(symbol, precio)
                 continue
             
+            # Break even después de +1.5%
             if pnl > 0.015:
                 pos["break_even"] = True
             if pos["break_even"] and pnl <= 0:
@@ -208,6 +228,7 @@ class Portfolio:
                 self.cerrar(symbol, precio)
                 continue
             
+            # Trailing stop
             if pnl > 0.02:
                 pos["trailing"] = True
             if pos["trailing"]:
