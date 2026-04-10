@@ -1,6 +1,6 @@
 # ======================================
 # CONFIGURACIÓN PRINCIPAL - BOT ADAPTATIVO CON IA
-# VERSIÓN PARA PRUEBAS (menos exigente)
+# VERSIÓN EXIGENTE - EVITAR TRADES BASURA
 # ======================================
 
 # ---------- MODO ----------
@@ -12,12 +12,12 @@ CAPITAL_INICIAL = 1000
 MAX_POSICIONES = 3
 USO_CAPITAL = 0.60
 
-# ---------- PARÁMETROS DINÁMICOS (VERSIÓN MENOS EXIGENTE PARA PRUEBAS) ----------
-RSI_MIN_BASE = 35               # ANTES: 45  (más fácil de cumplir)
-RSI_MAX_BASE = 75               # ANTES: 70  (más fácil de cumplir)
-VOLATILIDAD_MAX_BASE = 0.15     # ANTES: 0.10 (permite más volatilidad)
-VOLATILIDAD_MIN_BASE = 0.001    # ANTES: 0.003 (permite menos volatilidad)
-SCORE_MINIMO_BASE = 2           # ANTES: 3    (más fácil de cumplir)
+# ---------- PARÁMETROS DINÁMICOS (FILTROS MÁS EXIGENTES) ----------
+RSI_MIN_BASE = 40               # ANTES: 35 (más exigente)
+RSI_MAX_BASE = 75               # ANTES: 75 (igual)
+VOLATILIDAD_MAX_BASE = 0.12     # ANTES: 0.15 (menos volatilidad permitida)
+VOLATILIDAD_MIN_BASE = 0.002    # ANTES: 0.001 (más exigente)
+SCORE_MINIMO_BASE = 2           # Mínimo para considerar (pero Elite requiere 3)
 ATR_PERIOD = 14
 ATR_MULTIPLIER = 1.5
 TRAILING_GAP_DINAMICO = True
@@ -27,8 +27,11 @@ RETRAIN_EVERY_TRADES = 50
 OPTIMIZE_EVERY_HOURS = 4
 LOOKBACK_DAYS = 30
 
-# ---------- KELLY FRACCIONAL ----------
-KELLY_FRACTION = 0.2
+# ---------- TAMAÑO DE POSICIÓN POR CALIDAD ----------
+# Estos valores se usan en portfolio.py
+TAMANO_ELITE = 0.15             # 15% del capital actual
+TAMANO_OPORTUNISTA_BUENA = 0.10 # 10% del capital actual
+TAMANO_OPORTUNISTA_REGULAR = 0.05 # 5% del capital actual
 
 # ---------- COOLDOWN DINÁMICO ----------
 COOLDOWN_BASE = 20
@@ -39,12 +42,12 @@ COOLDOWN_MIN = 5
 TIMEFRAME = "5m"
 CYCLE_TIME = 15
 
-# ---------- UNIVERSO DE ACTIVOS (agregado DOGE para pruebas) ----------
+# ---------- UNIVERSO DE ACTIVOS ----------
 CRYPTOS = [
     "BTC/USDT", "ETH/USDT", "SOL/USDT", "AVAX/USDT", "ADA/USDT",
     "LINK/USDT", "ATOM/USDT", "INJ/USDT", "NEAR/USDT", "APT/USDT",
     "OP/USDT", "RENDER/USDT", "AR/USDT", "POL/USDT", "XRP/USDT",
-    "DOGE/USDT"     # Agregado para pruebas (más volátil)
+    "DOGE/USDT"
 ]
 
 # ---------- CORRELACIÓN ----------
@@ -55,10 +58,10 @@ CORRELACION = {
     "L4": ["LINK/USDT", "ATOM/USDT"],
     "L5": ["INJ/USDT", "NEAR/USDT", "APT/USDT"],
     "L6": ["OP/USDT", "AR/USDT", "RENDER/USDT"],
-    "MEME": ["DOGE/USDT"]   # Grupo aparte para DOGE
+    "MEME": ["DOGE/USDT"]
 }
 
-# ---------- API KEYS (cambia después por las tuyas) ----------
+# ---------- API KEYS ----------
 OKX_API_KEY = "TU_API_KEY"
 OKX_SECRET_KEY = "TU_SECRET"
 OKX_PASSPHRASE = "TU_PASSPHRASE"
