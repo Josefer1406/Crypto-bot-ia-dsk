@@ -13,7 +13,7 @@ class Portfolio:
         self.last_trade = 0
         self.cooldown = config.COOLDOWN_BASE
         print(f"🚀 Capital inicial: ${self.capital_inicial} | Modo {'SIMULACIÓN' if config.SIMULATION_MODE else 'REAL'}")
-        print(f"📊 Tamaños: Elite {config.TAMANO_ELITE*100}% | Buena {config.TAMANO_OPORTUNISTA_BUENA*100}% | Regular {config.TAMANO_OPORTUNISTA_REGULAR*100}%")
+        print(f"📊 Tamaños: Elite {config.TAMANO_ELITE*100}% | Buena {config.TAMANO_OPORTUNISTA_BUENA*100}%")
         print(f"🔄 Rotación inteligente ACTIVADA")
     
     def capital_invertido(self):
@@ -58,169 +58,95 @@ class Portfolio:
         return False
     
     def evaluar_posiciones(self, precios):
-        """Evalúa todas las posiciones y devuelve un ranking de peor a mejor"""
         ranking = []
         for symbol, pos in self.posiciones.items():
             precio = precios.get(symbol)
             if precio is None:
                 continue
-            
             pnl = (precio - pos["entry"]) / pos["entry"]
-            score_original = pos.get("score", 2)
-            tiempo_en_posicion = time.time() - pos["tiempo"]
-            
-            # Cálculo de "calidad" de la posición (menor = peor)
-            # Factores: PnL negativo pesa mucho, score bajo pesa, tiempo excesivo sin ganancia
-            calidad = 0
-            
-            # PnL negativo es malo
-            if pnl < 0:
-                calidad = pnl * 10  # Penaliza fuerte
-            else:
-                calidad = pnl * 2   # PnL positivo es bueno
-            
-            # Si lleva más de 4 horas sin ganar >1%, penaliza
-            if tiempo_en_posicion > 14400 and pnl < 0.01:
+            tiempo = time.time() - pos["tiempo"]
+            calidad = -pnl * 2 if pnl < 0 else pnl * 0.5
+            if tiempo > 14400 and pnl < 0.01:
                 calidad -= 0.3
-            
-            # Score bajo de entrada también penaliza
-            if score_original < 3:
-                calidad -= 0.2
-            
             ranking.append({
                 "symbol": symbol,
                 "pnl": pnl,
-                "score_original": score_original,
-                "tiempo": tiempo_en_posicion,
                 "calidad": calidad,
                 "posicion": pos
             })
-        
-        # Ordenar de peor calidad a mejor (el primero es el candidato a rotar)
         ranking.sort(key=lambda x: x["calidad"])
         return ranking
     
-    def deberia_rotar(self, nueva_senal, ranking_posiciones):
-        """Decide si la nueva señal es mejor que la peor posición actual"""
-        if not ranking_posiciones:
+    def deberia_rotar(self, nueva_senal, ranking):
+        if not ranking:
             return False
-        
-        peor_pos = ranking_posiciones[0]
+        peor = ranking[0]
         nueva_prob = nueva_senal.get("prob", 0)
         nuevo_score = nueva_senal.get("score", 0)
+        es_elite = nueva_prob >= 0.80 and nuevo_score >= 3
         
-        # Calcular calidad de la nueva señal (0 a 1)
-        calidad_nueva = (nueva_prob * 0.6) + ((nuevo_score / 4) * 0.4)
-        
-        # Si la nueva señal es Elite (prob > 0.75 y score >= 3)
-        es_elite = nueva_prob >= 0.75 and nuevo_score >= 3
-        
-        # Condiciones para rotar:
-        # 1. Nueva señal es Elite (siempre rota, incluso si todas están ganando)
-        # 2. Peor posición tiene PnL negativo Y nueva señal es buena
-        # 3. Peor posición tiene calidad muy baja (< -0.5)
-        
-        if es_elite:
-            print(f"   🔥 Señal ELITE detectada, evaluando rotación...")
-            # Si es Elite, rota incluso si la peor posición está ligeramente positiva
-            if peor_pos["pnl"] < 0.05:  # Si la peor posición tiene menos de 5% ganancia
-                return True
-            else:
-                print(f"   ⚠️ Peor posición tiene {round(peor_pos['pnl']*100,1)}% ganancia, no rotar")
-                return False
-        
-        if peor_pos["pnl"] < -0.01:  # Pérdida >1%
-            print(f"   📉 Peor posición en pérdida ({round(peor_pos['pnl']*100,1)}%), considerando rotación...")
+        if es_elite and peor["pnl"] < 0.05:
             return True
-        
-        if peor_pos["calidad"] < -0.5:
-            print(f"   📊 Peor posición con calidad baja ({round(peor_pos['calidad'],2)}), considerando rotación...")
+        if peor["pnl"] < -0.01:
             return True
-        
-        # Si la nueva señal es muy buena y la peor posición apenas está positiva
-        if calidad_nueva > 0.7 and peor_pos["pnl"] < 0.02:
-            print(f"   ⚡ Señal muy buena vs posición estancada, rotando...")
+        if peor["calidad"] < -0.5:
             return True
-        
         return False
     
-    def get_tamano_por_calidad(self, tipo, prob, score):
+    def get_tamano_por_calidad(self, tipo):
         if tipo == "elite":
             return config.TAMANO_ELITE
         elif tipo == "oportunista_buena":
             return config.TAMANO_OPORTUNISTA_BUENA
-        elif tipo == "oportunista_regular":
-            return config.TAMANO_OPORTUNISTA_REGULAR
         else:
-            return 0.03
+            return 0.03  # fallback
     
     def comprar(self, symbol, precio, prob, score, tipo, precios=None, atr_stop=None, trailing_gap=None):
-        # Verificar cooldown
         if not self.puede_operar():
             tiempo_restante = self.cooldown - (time.time() - self.last_trade)
             if tiempo_restante > 0:
                 print(f"   ⏱ Cooldown: esperar {round(tiempo_restante, 1)}s")
             return False
         
-        # Verificar si ya está en posiciones
         if symbol in self.posiciones:
-            print(f"   ⚠️ {symbol} ya está en posiciones")
             return False
         
-        # Verificar correlación
         if self.correlacionado(symbol):
             print(f"   ⛔ Correlación evitada: {symbol}")
             return False
         
-        # Calcular tamaño según calidad
-        size_pct = self.get_tamano_por_calidad(tipo, prob, score)
+        size_pct = self.get_tamano_por_calidad(tipo)
         capital_trade = self.capital * size_pct
         
-        # Verificar límite mínimo
         if capital_trade < 30:
             print(f"   ⚠️ Trade muy pequeño: ${round(capital_trade,2)} (mínimo $30)")
             return False
         
-        # Verificar límite de capital total
-        nuevo_total_invertido = self.capital_invertido() + capital_trade
-        limite_maximo = self.capital_inicial * config.USO_CAPITAL
+        nuevo_total = self.capital_invertido() + capital_trade
+        limite = self.capital_inicial * config.USO_CAPITAL
         
         print(f"   💰 Capital: ${round(self.capital,2)} | Invertido: ${round(self.capital_invertido(),2)} | Nuevo: ${round(capital_trade,2)} ({round(size_pct*100)}%)")
         
-        # ========== ROTACIÓN INTELIGENTE ==========
-        # Si no hay espacio, evaluar rotación
+        # Rotación si está lleno
         if len(self.posiciones) >= config.MAX_POSICIONES:
             if precios is None:
                 return False
-            
-            # Evaluar todas las posiciones actuales
             ranking = self.evaluar_posiciones(precios)
-            
-            if not ranking:
-                return False
-            
-            # Decidir si rotar
-            nueva_senal = {"prob": prob, "score": score, "tipo": tipo}
+            nueva_senal = {"prob": prob, "score": score}
             if not self.deberia_rotar(nueva_senal, ranking):
                 print(f"   ⚠️ Nueva señal no justifica rotación")
                 return False
-            
-            peor_pos = ranking[0]
-            print(f"   🔁 ROTANDO: sale {peor_pos['symbol']} (pnl {round(peor_pos['pnl']*100,1)}%) -> entra {symbol}")
-            self.cerrar(peor_pos['symbol'], precios[peor_pos['symbol']])
+            peor = ranking[0]
+            print(f"   🔁 ROTANDO: sale {peor['symbol']} (pnl {round(peor['pnl']*100,1)}%) -> entra {symbol}")
+            self.cerrar(peor['symbol'], precios[peor['symbol']])
         
-        # Verificar límite después de posible rotación
-        if nuevo_total_invertido > limite_maximo:
-            print(f"   ⚠️ Límite excedido: {round(nuevo_total_invertido,2)} > {round(limite_maximo,2)}")
+        if nuevo_total > limite:
             return False
-        
         if capital_trade > self.capital:
-            print(f"   ⚠️ Capital insuficiente: ${round(capital_trade,2)} > ${round(self.capital,2)}")
             return False
         
         cantidad = capital_trade / precio
         
-        # Ejecutar compra
         if config.SIMULATION_MODE:
             precio_real = precio
             cantidad_real = cantidad
@@ -265,19 +191,15 @@ class Portfolio:
             precio = precios.get(symbol)
             if precio is None:
                 continue
-            
             pnl = (precio - pos["entry"]) / pos["entry"]
-            
             if precio > pos["max_precio"]:
                 pos["max_precio"] = precio
             
-            # Stop loss dinámico
             if pnl <= pos["stop_loss_dinamico"]:
                 print(f"   🔴 Stop loss en {symbol}: pnl {round(pnl*100,1)}%")
                 self.cerrar(symbol, precio)
                 continue
             
-            # Break even después de +1.5%
             if pnl > 0.015:
                 pos["break_even"] = True
             if pos["break_even"] and pnl <= 0:
@@ -285,7 +207,6 @@ class Portfolio:
                 self.cerrar(symbol, precio)
                 continue
             
-            # Trailing stop
             if pnl > 0.02:
                 pos["trailing"] = True
             if pos["trailing"]:
@@ -299,28 +220,23 @@ class Portfolio:
         pos = self.posiciones[symbol]
         valor = pos["cantidad"] * precio
         pnl = (precio - pos["entry"]) / pos["entry"]
-        
         self.capital += valor
-        
         trade = {
             "symbol": symbol,
-            "pnl": float(round(pnl, 4)),
-            "capital": float(round(self.capital, 2)),
+            "pnl": round(pnl, 4),
+            "capital": round(self.capital, 2),
             "tipo": "SELL",
             "entry": pos["entry"],
             "exit": precio,
             "tipo_senal": pos.get("tipo", "desconocido"),
-            "prob_entrada": pos.get("prob", 0),
-            "razon": "stop_loss_o_rotacion"
+            "prob_entrada": pos.get("prob", 0)
         }
         self.historial.append(trade)
-        
         if not config.SIMULATION_MODE:
             try:
                 exchange.create_market_sell_order(symbol, pos["cantidad"])
             except Exception as e:
                 print(f"❌ Error en venta real: {e}")
-        
         print(f"   🔴 VENTA: {symbol} | pnl {round(pnl*100,1)}% | Capital: ${round(self.capital,2)}")
         del self.posiciones[symbol]
     
