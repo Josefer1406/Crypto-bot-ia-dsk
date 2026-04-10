@@ -38,7 +38,7 @@ CRYPTOS = [
     "OP/USDT", "RENDER/USDT", "AR/USDT", "POL/USDT", "XRP/USDT",
     "DOGE/USDT", "WIF/USDT", "PEPE/USDT", "SUI/USDT", "SEI/USDT",
     # Nuevos activos para diversificar grupos
-    "FTM/USDT", "DOT/USDT", "AAVE/USDT", "UNI/USDT", "LTC/USDT", "BCH/USDT"
+    "DOT/USDT", "AAVE/USDT", "UNI/USDT", "LTC/USDT", "BCH/USDT"
 ]
 
 # CORRELACIÓN ACTUALIZADA
