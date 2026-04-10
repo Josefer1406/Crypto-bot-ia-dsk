@@ -46,7 +46,6 @@ CORRELACION = {
     "L1": ["BTC/USDT", "ETH/USDT"],
     "L1_LEGACY": ["LTC/USDT", "BCH/USDT"],
     "L2": ["SOL/USDT", "AVAX/USDT"],
-    "L2_ALT": ["FTM/USDT"],
     "L3": ["ADA/USDT", "XRP/USDT", "POL/USDT"],
     "L4": ["LINK/USDT", "ATOM/USDT"],
     "L4_DEFI": ["AAVE/USDT", "UNI/USDT"],
