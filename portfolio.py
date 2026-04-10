@@ -12,7 +12,8 @@ class Portfolio:
         self.historial = []
         self.last_trade = 0
         self.cooldown = config.COOLDOWN_BASE
-        print(f"🚀 Capital inicial: {self.capital_inicial} | Modo {'SIMULACIÓN' if config.SIMULATION_MODE else 'REAL'}")
+        print(f"🚀 Capital inicial: ${self.capital_inicial} | Modo {'SIMULACIÓN' if config.SIMULATION_MODE else 'REAL'}")
+        print(f"📊 Tamaños: Elite {config.TAMANO_ELITE*100}% | Buena {config.TAMANO_OPORTUNISTA_BUENA*100}% | Regular {config.TAMANO_OPORTUNISTA_REGULAR*100}%")
     
     def capital_invertido(self):
         return sum(p["inversion"] for p in self.posiciones.values())
@@ -20,7 +21,7 @@ class Portfolio:
     def exposicion_actual(self):
         if self.capital_inicial == 0:
             return 0
-        return self.capital_invertido() / self.capital_inicial
+        return self.capital_invertido() / self.capital
     
     def actualizar_cooldown(self):
         if len(self.historial) < 5:
@@ -39,25 +40,19 @@ class Portfolio:
         return (time.time() - self.last_trade) > self.cooldown
     
     def obtener_grupo(self, symbol):
-        """Devuelve el grupo de correlación de un símbolo"""
         for g, lista in config.CORRELACION.items():
             if symbol in lista:
                 return g
         return None
     
     def correlacionado(self, symbol):
-        """Verifica si el símbolo está en el mismo grupo que alguna posición abierta"""
         grupo_nuevo = self.obtener_grupo(symbol)
-        
-        # Si no tiene grupo definido, no está correlacionado
         if grupo_nuevo is None:
             return False
-        
-        # Verificar si alguna posición abierta está en el mismo grupo
         for s in self.posiciones.keys():
             grupo_existente = self.obtener_grupo(s)
             if grupo_existente == grupo_nuevo:
-                print(f"   ⚠️ Correlación: {symbol} está en grupo {grupo_nuevo} con {s}")
+                print(f"   ⚠️ Correlación: {symbol} en grupo {grupo_nuevo} con {s}")
                 return True
         return False
     
@@ -74,23 +69,19 @@ class Portfolio:
                 peor_symbol = symbol
         return peor_symbol, peor_pnl
     
-    def calcular_tamano_kelly(self, prob):
-        if len(self.historial) > 20:
-            recent = self.historial[-20:]
-            winrate = sum(1 for t in recent if t["pnl"] > 0) / len(recent)
-            avg_win = np.mean([t["pnl"] for t in recent if t["pnl"] > 0]) if winrate > 0 else 0
-            avg_loss = abs(np.mean([t["pnl"] for t in recent if t["pnl"] <= 0])) if (1-winrate) > 0 else 1
-            b = avg_win / avg_loss if avg_loss != 0 else 1
-            kelly = (winrate * b - (1 - winrate)) / b
-            kelly = max(0, min(kelly, 0.25))
+    def get_tamano_por_calidad(self, tipo, prob, score):
+        """Retorna el porcentaje del capital a invertir según la calidad"""
+        if tipo == "elite":
+            return config.TAMANO_ELITE
+        elif tipo == "oportunista_buena":
+            return config.TAMANO_OPORTUNISTA_BUENA
+        elif tipo == "oportunista_regular":
+            return config.TAMANO_OPORTUNISTA_REGULAR
         else:
-            winrate_est = prob
-            b = 1.5
-            kelly = (winrate_est * b - (1 - winrate_est)) / b
-            kelly = max(0, min(kelly, 0.25))
-        return kelly * config.KELLY_FRACTION
+            # Fallback seguro
+            return 0.03
     
-    def comprar(self, symbol, precio, prob, score_nuevo=None, precios=None, atr_stop=None, trailing_gap=None):
+    def comprar(self, symbol, precio, prob, score, tipo, precios=None, atr_stop=None, trailing_gap=None):
         # Verificar cooldown
         if not self.puede_operar():
             tiempo_restante = self.cooldown - (time.time() - self.last_trade)
@@ -108,47 +99,46 @@ class Portfolio:
             print(f"   ⛔ Correlación evitada: {symbol}")
             return False
         
-        # Calcular espacios disponibles
-        espacios_disponibles = config.MAX_POSICIONES - len(self.posiciones)
-        print(f"   📊 Espacios disponibles: {espacios_disponibles} de {config.MAX_POSICIONES}")
+        # Calcular tamaño según calidad
+        size_pct = self.get_tamano_por_calidad(tipo, prob, score)
+        capital_trade = self.capital * size_pct
         
-        # Si no hay espacios, intentar rotar
-        if espacios_disponibles == 0:
+        # Verificar límite mínimo de trade
+        if capital_trade < 30:
+            print(f"   ⚠️ Trade muy pequeño: ${round(capital_trade,2)} (mínimo $30)")
+            return False
+        
+        # Verificar límite de capital total
+        nuevo_total_invertido = self.capital_invertido() + capital_trade
+        limite_maximo = self.capital_inicial * config.USO_CAPITAL
+        
+        print(f"   💰 Capital: ${round(self.capital,2)} | Invertido: ${round(self.capital_invertido(),2)} | Nuevo: ${round(capital_trade,2)} ({round(size_pct*100)}%)")
+        
+        if nuevo_total_invertido > limite_maximo:
+            print(f"   ⚠️ Límite excedido: {round(nuevo_total_invertido,2)} > {round(limite_maximo,2)}")
+            return False
+        
+        if capital_trade > self.capital:
+            print(f"   ⚠️ Capital insuficiente: ${round(capital_trade,2)} > ${round(self.capital,2)}")
+            return False
+        
+        # Si está lleno, intentar rotar
+        if len(self.posiciones) >= config.MAX_POSICIONES:
             if precios is None:
                 return False
             peor_symbol, peor_pnl = self.peor_posicion(precios)
             if peor_pnl >= 0:
-                print(f"   ⚠️ No hay posiciones con pérdidas para rotar (peor pnl: {round(peor_pnl,2)})")
+                print(f"   ⚠️ No hay posiciones con pérdidas para rotar")
                 return False
-            if prob < 0.70:
-                print(f"   ⚠️ Probabilidad {prob} insuficiente para rotar (mínimo 0.70)")
+            if tipo != "elite" and prob < 0.70:
+                print(f"   ⚠️ Solo Elite puede rotar con prob < 0.70")
                 return False
             print(f"   🔁 ROTANDO: sale {peor_symbol} (pnl {round(peor_pnl,2)}) -> entra {symbol}")
             self.cerrar(peor_symbol, precios[peor_symbol])
-            espacios_disponibles = 1
-        
-        # Calcular tamaño de posición
-        kelly_size = self.calcular_tamano_kelly(prob)
-        size = max(0.05, min(kelly_size, 0.25))
-        capital_trade = self.capital_inicial * size
-        
-        # Verificar límite de capital
-        nuevo_total_invertido = self.capital_invertido() + capital_trade
-        limite_maximo = self.capital_inicial * config.USO_CAPITAL
-        
-        print(f"   💰 Capital disponible: ${round(self.capital,2)} | Invertido: ${round(self.capital_invertido(),2)} | Nuevo trade: ${round(capital_trade,2)}")
-        
-        if nuevo_total_invertido > limite_maximo:
-            print(f"   ⚠️ Límite de capital excedido: {round(nuevo_total_invertido,2)} > {round(limite_maximo,2)}")
-            return False
-        
-        if capital_trade > self.capital:
-            print(f"   ⚠️ Capital insuficiente: necesita ${round(capital_trade,2)} pero tiene ${round(self.capital,2)}")
-            return False
         
         cantidad = capital_trade / precio
         
-        # Ejecutar compra (simulación)
+        # Ejecutar compra
         if config.SIMULATION_MODE:
             precio_real = precio
             cantidad_real = cantidad
@@ -160,19 +150,20 @@ class Portfolio:
                 cantidad_real = order['amount']
                 capital_trade_real = cantidad_real * precio_real
             except Exception as e:
-                print(f"   ❌ Error en orden de compra real: {e}")
+                print(f"   ❌ Error en orden real: {e}")
                 return False
         
         stop_loss = atr_stop if atr_stop is not None else -0.02
         trailing_gap_used = trailing_gap if trailing_gap is not None else 0.015
         
-        # REGISTRAR POSICIÓN ANTES DE RESTAR CAPITAL
         self.posiciones[symbol] = {
             "entry": precio_real,
             "cantidad": cantidad_real,
             "inversion": capital_trade_real,
             "max_precio": precio_real,
             "prob": prob,
+            "score": score,
+            "tipo": tipo,
             "trailing": False,
             "break_even": False,
             "tiempo": time.time(),
@@ -180,12 +171,10 @@ class Portfolio:
             "trailing_gap": trailing_gap_used
         }
         
-        # RESTAR EL CAPITAL (ESTA ES LA LÍNEA QUE FALTABA)
         self.capital -= capital_trade_real
-        
         self.last_trade = time.time()
         
-        print(f"   ✅ COMPRA: {symbol} | ${capital_trade_real:.2f} | prob {round(prob,2)} | Capital restante: ${round(self.capital,2)}")
+        print(f"   ✅ COMPRA: {symbol} | ${round(capital_trade_real,2)} ({round(size_pct*100)}%) | {tipo} | prob {round(prob,2)}")
         return True
     
     def actualizar(self, precios):
@@ -200,13 +189,13 @@ class Portfolio:
             if precio > pos["max_precio"]:
                 pos["max_precio"] = precio
             
-            # Stop loss
+            # Stop loss dinámico
             if pnl <= pos["stop_loss_dinamico"]:
                 print(f"   🔴 Stop loss en {symbol}: pnl {round(pnl,4)}")
                 self.cerrar(symbol, precio)
                 continue
             
-            # Break even
+            # Break even después de +1.5%
             if pnl > 0.015:
                 pos["break_even"] = True
             if pos["break_even"] and pnl <= 0:
@@ -227,11 +216,8 @@ class Portfolio:
     def cerrar(self, symbol, precio):
         pos = self.posiciones[symbol]
         valor = pos["cantidad"] * precio
-        
-        # Calcular PnL antes de actualizar capital
         pnl = (precio - pos["entry"]) / pos["entry"]
         
-        # SUMAR EL CAPITAL DE VUELTA
         self.capital += valor
         
         trade = {
@@ -240,7 +226,9 @@ class Portfolio:
             "capital": float(round(self.capital, 2)),
             "tipo": "SELL",
             "entry": pos["entry"],
-            "exit": precio
+            "exit": precio,
+            "tipo_senal": pos.get("tipo", "desconocido"),
+            "prob_entrada": pos.get("prob", 0)
         }
         self.historial.append(trade)
         
@@ -248,7 +236,7 @@ class Portfolio:
             try:
                 exchange.create_market_sell_order(symbol, pos["cantidad"])
             except Exception as e:
-                print(f"❌ Error en orden de venta real: {e}")
+                print(f"❌ Error en venta real: {e}")
         
         print(f"   🔴 VENTA: {symbol} | pnl {round(pnl,4)} | Capital: ${round(self.capital,2)}")
         del self.posiciones[symbol]
@@ -256,12 +244,12 @@ class Portfolio:
     def guardar_resultados(self):
         try:
             with open("historial_trades.csv", "w", newline='') as f:
-                writer = csv.DictWriter(f, fieldnames=["symbol", "pnl", "capital", "entry", "exit"])
+                writer = csv.DictWriter(f, fieldnames=["symbol", "pnl", "capital", "entry", "exit", "tipo_senal", "prob_entrada"])
                 writer.writeheader()
                 for t in self.historial:
                     writer.writerow(t)
         except Exception as e:
-            print(f"Error guardando historial: {e}")
+            print(f"Error guardando: {e}")
     
     def data(self):
         capital_actual = round(self.capital, 2)
