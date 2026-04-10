@@ -49,13 +49,11 @@ def analizar(symbol):
     
     thresholds = optimizer.optimal
     
-    # Filtros de mercado (usando config)
     if volatilidad > thresholds['vol_max'] or volatilidad < thresholds['vol_min']:
         return None
     if rsi < thresholds['rsi_min'] or rsi > thresholds['rsi_max']:
         return None
     
-    # Cálculo del score (0-4)
     score = 0
     if df["ema20"].iloc[-1] > df["ema50"].iloc[-1] > df["ema200"].iloc[-1]:
         score += 1
@@ -69,7 +67,6 @@ def analizar(symbol):
     if score < thresholds['score_min']:
         return None
     
-    # Probabilidad (IA o fallback)
     prob_ia = ai_model.predict_probability(df)
     if prob_ia is not None:
         prob = prob_ia
