@@ -1,5 +1,5 @@
 # ======================================
-# CONFIGURACIÓN INTERMEDIA - EXIGENTE PERO OPERATIVA
+# CONFIGURACIÓN - VERSIÓN PROFESIONAL (ELITE + BUENA)
 # ======================================
 
 SIMULATION_MODE = True
@@ -9,31 +9,30 @@ CAPITAL_INICIAL = 1000
 MAX_POSICIONES = 3
 USO_CAPITAL = 0.60
 
-# FILTROS INTERMEDIOS
+# FILTROS TÉCNICOS (intermedios, no demasiado estrictos)
 RSI_MIN_BASE = 40
 RSI_MAX_BASE = 72
 VOLATILIDAD_MAX_BASE = 0.12
 VOLATILIDAD_MIN_BASE = 0.0025
-SCORE_MINIMO_BASE = 2          # Volvemos a 2, pero con controles
+SCORE_MINIMO_BASE = 2          # Mínimo para considerar, pero Elite requiere 3
+
 ATR_PERIOD = 14
 ATR_MULTIPLIER = 1.5
 TRAILING_GAP_DINAMICO = True
 
-# TAMAÑOS DE POSICIÓN (moderados)
+# TAMAÑOS DE POSICIÓN (solo dos categorías)
 TAMANO_ELITE = 0.12            # 12%
 TAMANO_OPORTUNISTA_BUENA = 0.08 # 8%
-TAMANO_OPORTUNISTA_REGULAR = 0.03 # 3% (solo para señales decentes)
 
-# COOLDOWN RÁPIDO
+# COOLDOWN RÁPIDO (para tener oportunidades)
 COOLDOWN_BASE = 10
 COOLDOWN_MAX = 60
 COOLDOWN_MIN = 5
 
-# TIMEFRAMES
 TIMEFRAME = "5m"
 CYCLE_TIME = 10
 
-# UNIVERSO AMPLIADO (20 activos)
+# UNIVERSO DE ACTIVOS (20 activos líquidos)
 CRYPTOS = [
     "BTC/USDT", "ETH/USDT", "SOL/USDT", "AVAX/USDT", "ADA/USDT",
     "LINK/USDT", "ATOM/USDT", "INJ/USDT", "NEAR/USDT", "APT/USDT",
@@ -41,7 +40,7 @@ CRYPTOS = [
     "DOGE/USDT", "WIF/USDT", "PEPE/USDT", "SUI/USDT", "SEI/USDT"
 ]
 
-# CORRELACIÓN
+# CORRELACIÓN (evitar agrupaciones)
 CORRELACION = {
     "L1": ["BTC/USDT", "ETH/USDT"],
     "L2": ["SOL/USDT", "AVAX/USDT"],
@@ -52,6 +51,11 @@ CORRELACION = {
     "MEME": ["DOGE/USDT", "WIF/USDT", "PEPE/USDT"],
     "L1_ALT": ["SUI/USDT", "SEI/USDT"]
 }
+
+# IA Y APRENDIZAJE
+RETRAIN_EVERY_TRADES = 50
+OPTIMIZE_EVERY_HOURS = 4
+LOOKBACK_DAYS = 30
 
 # API KEYS (rellenar después)
 OKX_API_KEY = "TU_API_KEY"
