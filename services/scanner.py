@@ -49,26 +49,17 @@ def analizar(symbol):
     
     thresholds = optimizer.optimal
     
-    # ========== LOGS DE DEPURACIÓN ==========
-    print(f"🔍 {symbol}: RSI={round(rsi,1)} | Vol={round(volatilidad,4)} | Score a calcular...")
-    
-    # Filtro volatilidad
+    # FILTROS EXIGENTES
     if volatilidad > thresholds['vol_max']:
-        print(f"   ❌ {symbol}: Volatilidad alta ({round(volatilidad,4)} > {thresholds['vol_max']})")
         return None
     if volatilidad < thresholds['vol_min']:
-        print(f"   ❌ {symbol}: Volatilidad baja ({round(volatilidad,4)} < {thresholds['vol_min']})")
         return None
-    
-    # Filtro RSI
     if rsi < thresholds['rsi_min']:
-        print(f"   ❌ {symbol}: RSI bajo ({round(rsi,1)} < {thresholds['rsi_min']})")
         return None
     if rsi > thresholds['rsi_max']:
-        print(f"   ❌ {symbol}: RSI alto ({round(rsi,1)} > {thresholds['rsi_max']})")
         return None
     
-    # Calcular score
+    # Cálculo del score (0-4)
     score = 0
     if df["ema20"].iloc[-1] > df["ema50"].iloc[-1] > df["ema200"].iloc[-1]:
         score += 1
@@ -76,28 +67,24 @@ def analizar(symbol):
         score += 1
     if df["returns"].iloc[-1] > 0:
         score += 1
-    if 45 < rsi < 70:
+    if 40 < rsi < 75:  # Rango más exigente
         score += 1
     
-    print(f"   📊 {symbol}: Score={score} (mínimo requerido={thresholds['score_min']})")
-    
-    # Filtro score
+    # Score mínimo para considerar (2)
     if score < thresholds['score_min']:
-        print(f"   ❌ {symbol}: Score insuficiente ({score} < {thresholds['score_min']})")
         return None
     
-    # Probabilidad
+    # Probabilidad por IA o fallback
     prob_ia = ai_model.predict_probability(df)
     if prob_ia is not None:
         prob = prob_ia
     else:
+        # Fallback más conservador
         prob_map = {2: 0.55, 3: 0.70, 4: 0.85}
-        prob = prob_map.get(score, 0.5)
+        prob = prob_map.get(score, 0.50)
     
     atr_stop = atr_val * config.ATR_MULTIPLIER / precio
     atr_stop = min(atr_stop, 0.05)
-    
-    print(f"   ✅ {symbol}: ¡SEÑAL! Score={score}, Prob={round(prob,2)}")
     
     return {
         "symbol": symbol,
