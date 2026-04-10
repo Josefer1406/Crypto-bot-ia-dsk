@@ -1,9 +1,0 @@
-flask
-pandas
-numpy
-psycopg2-binary
-scikit-learn
-joblib
-ta
-streamlit
-ccxt
