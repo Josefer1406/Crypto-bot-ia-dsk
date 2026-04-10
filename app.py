@@ -21,20 +21,16 @@ def clasificar_trade(asset):
     prob = asset["prob"]
     score = asset["score"]
     
-    # Elite: prob >= 0.70 y score >= 3
-    if prob >= 0.70 and score >= 3:
+    if prob >= 0.75 and score >= 3:
         return "elite"
-    
-    # Buena: prob >= 0.60 y score >= 2
-    if prob >= 0.60 and score >= 2:
+    if prob >= 0.65 and score >= 2:
         return "oportunista_buena"
-    
     return None
 
 def bot():
     print("🚀 BOT HEDGE FUND CON IA - MODO", "SIMULACIÓN" if config.SIMULATION_MODE else "REAL")
     print("📊 Clasificación: Elite (12%) | Buena (8%)")
-    print("🎯 Prob mín: Elite 0.70, Buena 0.60 | Score mín: Elite 3, Buena 2")
+    print("🎯 Prob mín: Elite 0.75, Buena 0.65 | Score mín: Elite 3, Buena 2")
     contador = 0
     ultimo_reentreno = 0
     
