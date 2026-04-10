@@ -20,10 +20,15 @@ def score_institucional(asset):
 def clasificar_trade(asset):
     prob = asset["prob"]
     score = asset["score"]
-    if prob >= 0.80 and score >= 3:
+    
+    # Elite: alta calidad
+    if prob >= 0.70 and score >= 3:
         return "elite"
-    if prob >= 0.70 and score >= 2:
+    
+    # Oportunista: calidad media (bajado a 0.50 para más señales)
+    if prob >= 0.50 and score >= 2:
         return "oportunista"
+    
     return None
 
 def bot():
@@ -62,6 +67,8 @@ def bot():
             oportunistas = [a for a in universo if clasificar_trade(a) == "oportunista"]
             
             espacios = config.MAX_POSICIONES - len(portfolio.posiciones)
+            print(f"   📊 Espacios libres: {espacios} | Elite: {len(elite)} | Oportunistas: {len(oportunistas)}")
+            
             if espacios > 0:
                 seleccion = elite[:espacios]
                 if not seleccion:
@@ -76,6 +83,11 @@ def bot():
             
             ejecutados = 0
             for asset in seleccion:
+                # Verificar si ya está en posiciones ANTES de comprar
+                if asset["symbol"] in portfolio.posiciones:
+                    print(f"   ⚠️ {asset['symbol']} ya está en posiciones, saltando")
+                    continue
+                
                 ejecutado = portfolio.comprar(
                     asset["symbol"],
                     asset["precio"],
@@ -87,7 +99,7 @@ def bot():
                 )
                 if ejecutado:
                     ejecutados += 1
-                    print(f"🟢 TRADE: {asset['symbol']} | prob {round(asset['prob'],2)}")
+                    print(f"   🟢 TRADE EJECUTADO: {asset['symbol']} | prob {round(asset['prob'],2)} | score {round(asset['score_final'],2)}")
             
             if ejecutados == 0:
                 print("⛔ No se ejecutaron trades")
@@ -99,7 +111,7 @@ def bot():
                 print("💾 Resultados guardados")
             
             if len(portfolio.historial) >= config.RETRAIN_EVERY_TRADES and (time.time() - ultimo_reentreno > 3600):
-                print("🧠 Reentrenamiento de IA pendiente (requiere datos históricos)")
+                print("🧠 Reentrenamiento de IA pendiente")
                 ultimo_reentreno = time.time()
             
             optimizer.optimize()
