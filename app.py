@@ -72,21 +72,16 @@ def bot():
             # Selección de candidatos
             seleccion = []
             if espacios > 0:
-                # Hay espacio, tomar las mejores
-                seleccion.extend(elite[:espacios])
-                espacios -= len(seleccion)
-                if espacios > 0:
-                    seleccion.extend(buenas[:espacios])
+                # Hay espacio, tomar las mejores (que no estén ya en posiciones)
+                candidatos = [a for a in (elite + buenas) if a["symbol"] not in portfolio.posiciones]
+                seleccion = candidatos[:espacios]
             else:
-                # No hay espacio, evaluar la mejor señal para posible rotación
-                mejor_candidato = None
-                if elite:
-                    mejor_candidato = elite[0]  # mejor Elite
-                elif buenas:
-                    mejor_candidato = buenas[0]  # mejor Buena
-                if mejor_candidato:
-                    seleccion = [mejor_candidato]
+                # No hay espacio, evaluar la mejor señal para posible rotación (que no esté ya en posiciones)
+                candidatos_validos = [a for a in (elite + buenas) if a["symbol"] not in portfolio.posiciones]
+                if candidatos_validos:
+                    mejor_candidato = candidatos_validos[0]  # el mejor por score_final
                     print(f"   🔄 Evaluando rotación con {mejor_candidato['symbol']} ({mejor_candidato['tipo']})")
+                    seleccion = [mejor_candidato]
             
             if not seleccion:
                 print("⛔ Sin candidatos para operar")
@@ -95,9 +90,6 @@ def bot():
             
             ejecutados = 0
             for asset in seleccion:
-                if asset["symbol"] in portfolio.posiciones:
-                    continue
-                
                 ejecutado = portfolio.comprar(
                     asset["symbol"],
                     asset["precio"],
@@ -112,7 +104,7 @@ def bot():
                     ejecutados += 1
                     print(f"   🟢 TRADE EJECUTADO: {asset['symbol']} | {asset['tipo']} | prob {round(asset['prob'],2)}")
                 else:
-                    # Si no se ejecutó (porque no rotó), no hacemos nada
+                    # Si no se ejecutó, puede ser porque la rotación no fue posible
                     pass
             
             if ejecutados == 0:
