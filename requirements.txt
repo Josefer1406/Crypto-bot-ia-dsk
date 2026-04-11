@@ -7,3 +7,4 @@ ccxt
 plotly
 streamlit
 requests
+streamlit-autorefresh
