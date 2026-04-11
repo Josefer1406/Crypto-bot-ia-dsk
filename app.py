@@ -69,12 +69,24 @@ def bot():
             espacios = config.MAX_POSICIONES - len(portfolio.posiciones)
             print(f"   📊 Espacios: {espacios} | Elite: {len(elite)} | Buenas: {len(buenas)}")
             
+            # Selección de candidatos
             seleccion = []
             if espacios > 0:
+                # Hay espacio, tomar las mejores
                 seleccion.extend(elite[:espacios])
                 espacios -= len(seleccion)
-            if espacios > 0:
-                seleccion.extend(buenas[:espacios])
+                if espacios > 0:
+                    seleccion.extend(buenas[:espacios])
+            else:
+                # No hay espacio, evaluar la mejor señal para posible rotación
+                mejor_candidato = None
+                if elite:
+                    mejor_candidato = elite[0]  # mejor Elite
+                elif buenas:
+                    mejor_candidato = buenas[0]  # mejor Buena
+                if mejor_candidato:
+                    seleccion = [mejor_candidato]
+                    print(f"   🔄 Evaluando rotación con {mejor_candidato['symbol']} ({mejor_candidato['tipo']})")
             
             if not seleccion:
                 print("⛔ Sin candidatos para operar")
@@ -98,7 +110,10 @@ def bot():
                 )
                 if ejecutado:
                     ejecutados += 1
-                    print(f"   🟢 TRADE: {asset['symbol']} | {asset['tipo']} | prob {round(asset['prob'],2)}")
+                    print(f"   🟢 TRADE EJECUTADO: {asset['symbol']} | {asset['tipo']} | prob {round(asset['prob'],2)}")
+                else:
+                    # Si no se ejecutó (porque no rotó), no hacemos nada
+                    pass
             
             if ejecutados == 0:
                 print("⛔ No se ejecutaron trades")
