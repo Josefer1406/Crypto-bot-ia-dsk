@@ -1,8 +1,14 @@
 import config
 import time
 import csv
+import json
+import os
 import numpy as np
 from exchange_connector import exchange
+
+# Archivos de persistencia
+ESTADO_FILE = "portfolio_state.json"
+HISTORIAL_FILE = "historial_trades.csv"
 
 class Portfolio:
     def __init__(self):
@@ -12,10 +18,55 @@ class Portfolio:
         self.historial = []
         self.last_trade = 0
         self.cooldown = config.COOLDOWN_BASE
+        
+        # Cargar estado previo si existe
+        self.cargar_estado()
+        
         print(f"🚀 Capital inicial: ${self.capital_inicial} | Modo {'SIMULACIÓN' if config.SIMULATION_MODE else 'REAL'}")
         print(f"📊 Tamaños: Elite {config.TAMANO_ELITE*100}% | Buena {config.TAMANO_OPORTUNISTA_BUENA*100}%")
         print(f"🔄 Rotación flexible: Elite rota si peor posición tiene <20% ganancia")
         print(f"📈 Máximo de posiciones: {config.MAX_POSICIONES}")
+        if self.historial:
+            print(f"📀 Estado cargado: Capital ${self.capital:.2f}, {len(self.posiciones)} posiciones, {len(self.historial)} trades")
+    
+    def guardar_estado(self):
+        """Guarda el estado actual en un archivo JSON"""
+        estado = {
+            "capital": self.capital,
+            "posiciones": self.posiciones,
+            "historial": self.historial[-200:],  # guardar últimos 200 trades
+            "last_trade": self.last_trade,
+            "cooldown": self.cooldown,
+            "capital_inicial": self.capital_inicial
+        }
+        try:
+            with open(ESTADO_FILE, "w") as f:
+                json.dump(estado, f, indent=2, default=str)
+        except Exception as e:
+            print(f"Error guardando estado: {e}")
+    
+    def cargar_estado(self):
+        """Carga el estado desde el archivo JSON si existe"""
+        if os.path.exists(ESTADO_FILE):
+            try:
+                with open(ESTADO_FILE, "r") as f:
+                    estado = json.load(f)
+                self.capital = estado.get("capital", self.capital_inicial)
+                self.posiciones = estado.get("posiciones", {})
+                self.historial = estado.get("historial", [])
+                self.last_trade = estado.get("last_trade", 0)
+                self.cooldown = estado.get("cooldown", config.COOLDOWN_BASE)
+                self.capital_inicial = estado.get("capital_inicial", config.CAPITAL_INICIAL)
+                # Convertir claves de posiciones si es necesario (por si se cargó como string)
+                if isinstance(self.posiciones, dict):
+                    # Asegurar que los valores numéricos sean float
+                    for sym, pos in self.posiciones.items():
+                        for key in ["entry", "cantidad", "inversion", "max_precio", "prob", "score", "trailing_gap", "stop_loss_dinamico"]:
+                            if key in pos:
+                                pos[key] = float(pos[key])
+                        pos["tiempo"] = float(pos.get("tiempo", time.time()))
+            except Exception as e:
+                print(f"Error cargando estado: {e}")
     
     def capital_invertido(self):
         return sum(p["inversion"] for p in self.posiciones.values())
@@ -59,9 +110,11 @@ class Portfolio:
         return False
     
     def calcular_calidad_senal(self, prob, score):
+        """Calcula un score de calidad entre 0 y 1"""
         return (prob * 0.6) + ((score / 4) * 0.4)
     
     def evaluar_posiciones(self, precios):
+        """Retorna lista de posiciones ordenadas de peor a mejor calidad"""
         ranking = []
         for symbol, pos in self.posiciones.items():
             precio = precios.get(symbol)
@@ -98,7 +151,7 @@ class Portfolio:
         es_elite = (nuevo_tipo == "elite") or (nueva_prob >= 0.70 and nuevo_score >= 3)
         nueva_calidad = self.calcular_calidad_senal(nueva_prob, nuevo_score)
         
-        # Regla 1: Si es Elite y la peor posición tiene ganancia < 20% (muy flexible)
+        # Regla 1: Si es Elite y la peor posición tiene ganancia < 20%
         if es_elite and peor["pnl"] < 0.20:
             print(f"   🔥 Rotación Elite: nueva calidad {nueva_calidad:.2f} vs peor calidad {peor['calidad']:.2f} (pnl {peor['pnl']*100:.1f}%)")
             return True
@@ -213,10 +266,15 @@ class Portfolio:
         self.capital -= capital_trade_real
         self.last_trade = time.time()
         
+        # Guardar estado después de comprar
+        self.guardar_estado()
+        self.guardar_resultados()  # también actualizar CSV
+        
         print(f"   ✅ COMPRA: {symbol} | ${round(capital_trade_real,2)} ({round(size_pct*100)}%) | {tipo} | prob {round(prob,2)}")
         return True
     
     def actualizar(self, precios):
+        cerro_alguno = False
         for symbol in list(self.posiciones.keys()):
             pos = self.posiciones[symbol]
             precio = precios.get(symbol)
@@ -229,6 +287,7 @@ class Portfolio:
             if pnl <= pos["stop_loss_dinamico"]:
                 print(f"   🔴 Stop loss en {symbol}: pnl {round(pnl*100,1)}%")
                 self.cerrar(symbol, precio)
+                cerro_alguno = True
                 continue
             
             if pnl > 0.015:
@@ -236,6 +295,7 @@ class Portfolio:
             if pos["break_even"] and pnl <= 0:
                 print(f"   🔴 Break even en {symbol}")
                 self.cerrar(symbol, precio)
+                cerro_alguno = True
                 continue
             
             if pnl > 0.02:
@@ -245,7 +305,11 @@ class Portfolio:
                 if precio <= stop:
                     print(f"   🔴 Trailing stop en {symbol}")
                     self.cerrar(symbol, precio)
+                    cerro_alguno = True
                     continue
+        if cerro_alguno:
+            self.guardar_estado()
+            self.guardar_resultados()
     
     def cerrar(self, symbol, precio):
         pos = self.posiciones[symbol]
@@ -259,7 +323,8 @@ class Portfolio:
             "entry": pos["entry"],
             "exit": precio,
             "tipo_senal": pos.get("tipo", "desconocido"),
-            "prob_entrada": pos.get("prob", 0)
+            "prob_entrada": pos.get("prob", 0),
+            "timestamp": time.time()
         }
         self.historial.append(trade)
         if not config.SIMULATION_MODE:
@@ -269,30 +334,52 @@ class Portfolio:
                 print(f"❌ Error en venta real: {e}")
         print(f"   🔴 VENTA: {symbol} | pnl {round(pnl*100,1)}% | Capital: ${round(self.capital,2)}")
         del self.posiciones[symbol]
+        # Guardar estado después de vender
+        self.guardar_estado()
+        self.guardar_resultados()
     
     def guardar_resultados(self):
         try:
-            fieldnames = ["symbol", "pnl", "capital", "entry", "exit", "tipo_senal", "prob_entrada"]
-            with open("historial_trades.csv", "w", newline='') as f:
+            fieldnames = ["symbol", "pnl", "capital", "entry", "exit", "tipo_senal", "prob_entrada", "timestamp"]
+            # Si el archivo no existe, escribir cabecera
+            file_exists = os.path.isfile(HISTORIAL_FILE)
+            with open(HISTORIAL_FILE, "a", newline='') as f:
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
-                writer.writeheader()
-                for t in self.historial:
-                    row = {k: t.get(k, "") for k in fieldnames}
+                if not file_exists:
+                    writer.writeheader()
+                # Solo escribir los trades que no estén ya escritos (opcional: escribir todos)
+                # Para simplificar, escribimos todo el historial cada vez (pero puede crecer)
+                # Mejor: escribir solo el último trade
+                if self.historial:
+                    ultimo = self.historial[-1]
+                    row = {k: ultimo.get(k, "") for k in fieldnames}
                     writer.writerow(row)
         except Exception as e:
-            print(f"Error guardando: {e}")
+            print(f"Error guardando historial: {e}")
     
     def data(self):
         capital_actual = round(self.capital, 2)
         pnl = round(capital_actual - self.capital_inicial, 2)
         pnl_pct = round((pnl / self.capital_inicial) * 100, 2) if self.capital_inicial != 0 else 0
+        # Calcular drawdown máximo desde historial
+        max_dd = 0
+        if self.historial:
+            peak = self.capital_inicial
+            for trade in self.historial:
+                cap = trade.get("capital", peak)
+                if cap > peak:
+                    peak = cap
+                dd = (peak - cap) / peak * 100
+                if dd > max_dd:
+                    max_dd = dd
         return {
             "capital": capital_actual,
             "capital_inicial": self.capital_inicial,
             "pnl": pnl,
             "pnl_pct": pnl_pct,
             "posiciones": self.posiciones,
-            "historial": self.historial[-20:]
+            "historial": self.historial[-50:],  # últimos 50 trades para no sobrecargar
+            "max_drawdown": round(max_dd, 2)
         }
 
 portfolio = Portfolio()
