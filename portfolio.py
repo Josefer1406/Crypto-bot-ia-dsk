@@ -24,7 +24,7 @@ class Portfolio:
         
         print(f"🚀 Capital inicial: ${self.capital_inicial} | Modo {'SIMULACIÓN' if config.SIMULATION_MODE else 'REAL'}")
         print(f"📊 Tamaños: Elite {config.TAMANO_ELITE*100}% | Buena {config.TAMANO_OPORTUNISTA_BUENA*100}%")
-        print(f"🔄 Rotación flexible: Elite rota si peor posición tiene <20% ganancia")
+        print(f"🔄 Rotación flexible: Elite rota si peor posición tiene <20% ganancia o baja calidad")
         print(f"📈 Máximo de posiciones: {config.MAX_POSICIONES}")
         if self.historial:
             print(f"📀 Estado cargado: Capital ${self.capital:.2f}, {len(self.posiciones)} posiciones, {len(self.historial)} trades")
@@ -34,7 +34,7 @@ class Portfolio:
         estado = {
             "capital": self.capital,
             "posiciones": self.posiciones,
-            "historial": self.historial[-200:],  # guardar últimos 200 trades
+            "historial": self.historial[-200:],
             "last_trade": self.last_trade,
             "cooldown": self.cooldown,
             "capital_inicial": self.capital_inicial
@@ -57,9 +57,8 @@ class Portfolio:
                 self.last_trade = estado.get("last_trade", 0)
                 self.cooldown = estado.get("cooldown", config.COOLDOWN_BASE)
                 self.capital_inicial = estado.get("capital_inicial", config.CAPITAL_INICIAL)
-                # Convertir claves de posiciones si es necesario (por si se cargó como string)
+                # Asegurar tipos numéricos
                 if isinstance(self.posiciones, dict):
-                    # Asegurar que los valores numéricos sean float
                     for sym, pos in self.posiciones.items():
                         for key in ["entry", "cantidad", "inversion", "max_precio", "prob", "score", "trailing_gap", "stop_loss_dinamico"]:
                             if key in pos:
@@ -110,11 +109,9 @@ class Portfolio:
         return False
     
     def calcular_calidad_senal(self, prob, score):
-        """Calcula un score de calidad entre 0 y 1"""
         return (prob * 0.6) + ((score / 4) * 0.4)
     
     def evaluar_posiciones(self, precios):
-        """Retorna lista de posiciones ordenadas de peor a mejor calidad"""
         ranking = []
         for symbol, pos in self.posiciones.items():
             precio = precios.get(symbol)
@@ -151,12 +148,12 @@ class Portfolio:
         es_elite = (nuevo_tipo == "elite") or (nueva_prob >= 0.70 and nuevo_score >= 3)
         nueva_calidad = self.calcular_calidad_senal(nueva_prob, nuevo_score)
         
-        # Regla 1: Si es Elite y la peor posición tiene ganancia < 20%
+        # Regla 1: Elite rota si peor posición tiene <20% ganancia
         if es_elite and peor["pnl"] < 0.20:
             print(f"   🔥 Rotación Elite: nueva calidad {nueva_calidad:.2f} vs peor calidad {peor['calidad']:.2f} (pnl {peor['pnl']*100:.1f}%)")
             return True
         
-        # Regla 2: Calidad muy superior (umbral bajo)
+        # Regla 2: Calidad muy superior
         if nueva_calidad > peor["calidad"] + 0.10:
             print(f"   ⚡ Rotación por calidad: nueva {nueva_calidad:.2f} > peor {peor['calidad']:.2f} + 0.10")
             return True
@@ -164,6 +161,11 @@ class Portfolio:
         # Regla 3: Pérdida > 1% y señal decente
         if peor["pnl"] < -0.01 and nueva_calidad > 0.4:
             print(f"   📉 Rotación por pérdida: peor pnl {peor['pnl']*100:.1f}%")
+            return True
+        
+        # Regla 4: NUEVA - Si la nueva señal es Elite y la peor posición tiene calidad < 0.6, rotar aunque esté correlacionada
+        if es_elite and peor["calidad"] < 0.6:
+            print(f"   🔄 Rotación forzada por baja calidad: nueva Elite vs posición mediocre (calidad {peor['calidad']:.2f})")
             return True
         
         return False
@@ -204,10 +206,11 @@ class Portfolio:
                 print(f"   ⚠️ Nueva señal no justifica rotación")
                 return False
         
-        # ========== CORRELACIÓN (después de posible rotación) ==========
-        if self.correlacionado(symbol):
-            print(f"   ⛔ Correlación evitada: {symbol}")
-            return False
+        # ========== CORRELACIÓN (después de posible rotación) - TEMPORALMENTE DESACTIVADA ==========
+        # Comentado para permitir rotación incluso con correlación
+        # if self.correlacionado(symbol):
+        #     print(f"   ⛔ Correlación evitada: {symbol}")
+        #     return False
         
         # Tamaño de posición
         size_pct = self.get_tamano_por_calidad(tipo)
@@ -245,8 +248,8 @@ class Portfolio:
                 print(f"   ❌ Error en orden real: {e}")
                 return False
         
-        stop_loss = atr_stop if atr_stop is not None else -0.02
-        trailing_gap_used = trailing_gap if trailing_gap is not None else 0.015
+        stop_loss = atr_stop if atr_stop is not None else -0.01  # Stop más sensible
+        trailing_gap_used = trailing_gap if trailing_gap is not None else 0.01  # Trailing más sensible
         
         self.posiciones[symbol] = {
             "entry": precio_real,
@@ -268,7 +271,7 @@ class Portfolio:
         
         # Guardar estado después de comprar
         self.guardar_estado()
-        self.guardar_resultados()  # también actualizar CSV
+        self.guardar_resultados()
         
         print(f"   ✅ COMPRA: {symbol} | ${round(capital_trade_real,2)} ({round(size_pct*100)}%) | {tipo} | prob {round(prob,2)}")
         return True
@@ -284,13 +287,15 @@ class Portfolio:
             if precio > pos["max_precio"]:
                 pos["max_precio"] = precio
             
-            if pnl <= pos["stop_loss_dinamico"]:
+            # Stop loss más sensible (1% en lugar de 2-5%)
+            if pnl <= -0.01:
                 print(f"   🔴 Stop loss en {symbol}: pnl {round(pnl*100,1)}%")
                 self.cerrar(symbol, precio)
                 cerro_alguno = True
                 continue
             
-            if pnl > 0.015:
+            # Break even más bajo (1% en lugar de 1.5%)
+            if pnl > 0.01:
                 pos["break_even"] = True
             if pos["break_even"] and pnl <= 0:
                 print(f"   🔴 Break even en {symbol}")
@@ -298,7 +303,8 @@ class Portfolio:
                 cerro_alguno = True
                 continue
             
-            if pnl > 0.02:
+            # Trailing stop más sensible (1% en lugar de 2%)
+            if pnl > 0.01:
                 pos["trailing"] = True
             if pos["trailing"]:
                 stop = pos["max_precio"] * (1 - pos["trailing_gap"])
@@ -341,15 +347,11 @@ class Portfolio:
     def guardar_resultados(self):
         try:
             fieldnames = ["symbol", "pnl", "capital", "entry", "exit", "tipo_senal", "prob_entrada", "timestamp"]
-            # Si el archivo no existe, escribir cabecera
             file_exists = os.path.isfile(HISTORIAL_FILE)
             with open(HISTORIAL_FILE, "a", newline='') as f:
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 if not file_exists:
                     writer.writeheader()
-                # Solo escribir los trades que no estén ya escritos (opcional: escribir todos)
-                # Para simplificar, escribimos todo el historial cada vez (pero puede crecer)
-                # Mejor: escribir solo el último trade
                 if self.historial:
                     ultimo = self.historial[-1]
                     row = {k: ultimo.get(k, "") for k in fieldnames}
@@ -378,7 +380,7 @@ class Portfolio:
             "pnl": pnl,
             "pnl_pct": pnl_pct,
             "posiciones": self.posiciones,
-            "historial": self.historial[-50:],  # últimos 50 trades para no sobrecargar
+            "historial": self.historial[-50:],
             "max_drawdown": round(max_dd, 2)
         }
 
