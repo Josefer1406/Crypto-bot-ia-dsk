@@ -1,5 +1,5 @@
 # ======================================
-# CONFIGURACIÓN - VERSIÓN MUY FLEXIBLE (PARA GENERAR SEÑALES)
+# CONFIGURACIÓN - VERSIÓN MUY PERMISIVA (PARA GENERAR ACTIVIDAD)
 # ======================================
 
 SIMULATION_MODE = True
@@ -9,46 +9,54 @@ CAPITAL_INICIAL = 1000
 MAX_POSICIONES = 4
 USO_CAPITAL = 0.60
 
-# FILTROS MUY PERMISIVOS
+# FILTROS MUY AMPLIOS (para que haya señales)
 RSI_MIN_BASE = 20
 RSI_MAX_BASE = 80
-VOLATILIDAD_MAX_BASE = 0.20
-VOLATILIDAD_MIN_BASE = 0.001
+VOLATILIDAD_MAX_BASE = 0.25
+VOLATILIDAD_MIN_BASE = 0.0005
 SCORE_MINIMO_BASE = 1          # Cualquier score positivo
 
 ATR_PERIOD = 14
-ATR_MULTIPLIER = 1.5
+ATR_MULTIPLIER = 1.0           # Stop más sensible (1.0 en lugar de 1.5)
 TRAILING_GAP_DINAMICO = True
 
-# TAMAÑOS (puedes mantenerlos)
+# TAMAÑOS (se mantienen)
 TAMANO_ELITE = 0.12
 TAMANO_OPORTUNISTA_BUENA = 0.08
 
-COOLDOWN_BASE = 10
-COOLDOWN_MAX = 60
-COOLDOWN_MIN = 5
+# COOLDOWN más rápido para más operaciones
+COOLDOWN_BASE = 5
+COOLDOWN_MAX = 30
+COOLDOWN_MIN = 3
 
 TIMEFRAME = "5m"
 CYCLE_TIME = 10
 
-# UNIVERSO (puedes reducirlo a unos pocos para pruebas rápidas)
+# UNIVERSO REDUCIDO (incluye varios grupos para diversificar)
 CRYPTOS = [
-    "BTC/USDT", "ETH/USDT", "SOL/USDT", "ADA/USDT", "DOGE/USDT"
+    "BTC/USDT", "ETH/USDT", "SOL/USDT", "ADA/USDT", "DOGE/USDT",
+    "LINK/USDT", "DOT/USDT", "AAVE/USDT"
 ]
 
-# CORRELACIÓN (simplificada)
+# CORRELACIÓN (grupos claros)
 CORRELACION = {
     "L1": ["BTC/USDT", "ETH/USDT"],
     "L2": ["SOL/USDT"],
     "L3": ["ADA/USDT"],
-    "MEME": ["DOGE/USDT"]
+    "MEME": ["DOGE/USDT"],
+    "L4": ["LINK/USDT"],
+    "L5": ["DOT/USDT"],
+    "L6": ["AAVE/USDT"]
 }
 
-# IA (sin cambios)
+# IA
 RETRAIN_EVERY_TRADES = 50
 OPTIMIZE_EVERY_HOURS = 4
 LOOKBACK_DAYS = 30
 
-# API KEYS (igual)
+# API KEYS (cambia por las tuyas)
 OKX_API_KEY = "TU_API_KEY"
-...
+OKX_SECRET_KEY = "TU_SECRET"
+OKX_PASSPHRASE = "TU_PASSPHRASE"
+BINANCE_API_KEY = "TU_API_KEY"
+BINANCE_SECRET_KEY = "TU_SECRET"
